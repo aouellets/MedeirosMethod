@@ -46,14 +46,33 @@ const TrainingHomeScreen = ({ navigation, route }) => {
   const loadTrackData = async (trackSlug) => {
     try {
       const [todaysSessionData, weekSessionsData] = await Promise.all([
-        workoutService.getTodaysSession(trackSlug),
-        workoutService.getThisWeekSessions(trackSlug)
+        workoutService.getTodaysSession(trackSlug).catch(err => {
+          console.log('No session for today:', err.message);
+          return null;
+        }),
+        workoutService.getThisWeekSessions(trackSlug).catch(err => {
+          console.log('No sessions for this week:', err.message);
+          return [];
+        })
       ]);
       
+      // Check if today's workout is completed by finding it in the week sessions
+      if (todaysSessionData && weekSessionsData) {
+        const todayWithCompletion = weekSessionsData.find(session => 
+          session.id === todaysSessionData.id
+        );
+        if (todayWithCompletion) {
+          todaysSessionData.completed = todayWithCompletion.completed;
+        }
+      }
+      
       setTodaysWorkout(todaysSessionData);
-      setThisWeekWorkouts(weekSessionsData);
+      setThisWeekWorkouts(weekSessionsData || []);
     } catch (error) {
       console.error('Error loading track data:', error);
+      // Set default values on error
+      setTodaysWorkout(null);
+      setThisWeekWorkouts([]);
     }
   };
 
@@ -93,8 +112,19 @@ const TrainingHomeScreen = ({ navigation, route }) => {
           </View>
         </View>
 
-        {item.completed && <Text style={styles.completedText}>✓ Completed</Text>}
-        {item.is_current && <Text style={styles.currentText}>Current</Text>}
+        <View style={styles.statusContainer}>
+          {item.completed && (
+            <View style={styles.completedBadge}>
+              <Text style={styles.completedText}>✓ Completed</Text>
+              <Text style={styles.completedSubtext}>Tap to review</Text>
+            </View>
+          )}
+          {item.is_current && !item.completed && (
+            <View style={styles.currentBadge}>
+              <Text style={styles.currentText}>Today's Workout</Text>
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -189,12 +219,17 @@ const TrainingHomeScreen = ({ navigation, route }) => {
           </ScrollView>
 
           {/* Today's Workout */}
-          {todaysWorkout && (
-            <View style={styles.todaySection}>
-              <Text style={styles.sectionTitle}>Today's Workout</Text>
+          <View style={styles.todaySection}>
+            <Text style={styles.sectionTitle}>Today's Workout</Text>
+            {todaysWorkout ? (
               <View style={styles.todayCard}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.sessionType}>{formatSessionType(todaysWorkout.session_type)}</Text>
+                  {todaysWorkout.completed && (
+                    <View style={styles.completedBadgeSmall}>
+                      <Text style={styles.completedTextSmall}>✓ Completed</Text>
+                    </View>
+                  )}
                 </View>
                 
                 <Text style={styles.todayWorkoutName}>{formatSessionName(todaysWorkout.name)}</Text>
@@ -215,26 +250,57 @@ const TrainingHomeScreen = ({ navigation, route }) => {
                 </Text>
                 
                 <TouchableOpacity 
-                  style={styles.startButton}
+                  style={[
+                    styles.startButton,
+                    todaysWorkout.completed && styles.reviewButton
+                  ]}
                   onPress={() => navigation.navigate('WorkoutPreview', { workout: todaysWorkout })}
                 >
-                  <Text style={styles.startButtonText}>Start Workout</Text>
+                  <Text style={styles.startButtonText}>
+                    {todaysWorkout.completed ? 'Review Workout' : 'Start Workout'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
+            ) : (
+              <View style={styles.noWorkoutCard}>
+                <Text style={styles.noWorkoutTitle}>No Workout Today</Text>
+                <Text style={styles.noWorkoutSubtitle}>
+                  Take a rest day or check out this week's other workouts below
+                </Text>
+                <TouchableOpacity 
+                  style={styles.browseButton}
+                  onPress={() => {
+                    if (thisWeekWorkouts.length > 0) {
+                      navigation.navigate('WorkoutPreview', { workout: thisWeekWorkouts[0] });
+                    }
+                  }}
+                >
+                  <Text style={styles.browseButtonText}>Browse This Week</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
 
           {/* This Week */}
           <View style={styles.weekSection}>
             <Text style={styles.sectionTitle}>This Week</Text>
-            <FlatList
-              data={thisWeekWorkouts}
-              renderItem={renderWorkoutCard}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.weekList}
-            />
+            {thisWeekWorkouts.length > 0 ? (
+              <FlatList
+                data={thisWeekWorkouts}
+                renderItem={renderWorkoutCard}
+                keyExtractor={(item) => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.weekList}
+              />
+            ) : (
+              <View style={styles.noWorkoutsCard}>
+                <Text style={styles.noWorkoutsText}>No workouts scheduled for this week</Text>
+                <Text style={styles.noWorkoutsSubtext}>
+                  Check back later or contact support if this seems incorrect
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* History Button */}
@@ -519,6 +585,90 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  noWorkoutCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  noWorkoutTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.slateBlue,
+    marginBottom: 8,
+  },
+  noWorkoutSubtitle: {
+    fontSize: 14,
+    color: colors.gray,
+    textAlign: 'center',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  browseButton: {
+    backgroundColor: colors.slateBlue,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  browseButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noWorkoutsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  noWorkoutsText: {
+    fontSize: 16,
+    color: colors.white,
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  noWorkoutsSubtext: {
+    fontSize: 14,
+    color: colors.white,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  statusContainer: {
+    marginTop: 8,
+  },
+  completedBadge: {
+    alignItems: 'center',
+  },
+  completedSubtext: {
+    fontSize: 10,
+    color: colors.green,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  currentBadge: {
+    alignItems: 'center',
+  },
+  completedBadgeSmall: {
+    backgroundColor: colors.green,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  completedTextSmall: {
+    fontSize: 10,
+    color: colors.white,
+    fontWeight: '600',
+  },
+  reviewButton: {
+    backgroundColor: colors.slateBlue,
   },
 });
 

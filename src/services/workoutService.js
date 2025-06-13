@@ -225,7 +225,7 @@ export const workoutService = {
       const today = new Date();
       const dayOfWeek = today.getDay() || 7; // Convert Sunday (0) to 7
 
-      const { data: session, error } = await supabase
+      const { data: sessions, error } = await supabase
         .from('sessions')
         .select(`
           *,
@@ -252,10 +252,12 @@ export const workoutService = {
         .eq('day_of_week', dayOfWeek)
         .eq('week_number', 1) // Default to week 1 for now
         .eq('is_published', true)
-        .single();
+        .order('created_at', { ascending: true }); // Get oldest first if multiple
 
       if (error) throw error;
-      return session;
+      
+      // Return the first session if any exist, or null if none
+      return sessions && sessions.length > 0 ? sessions[0] : null;
     } catch (error) {
       console.error('Error fetching today\'s session:', error);
       throw error;
@@ -272,7 +274,10 @@ export const workoutService = {
         .eq('slug', trackSlug)
         .single();
 
-      if (trackError) throw trackError;
+      if (trackError) {
+        console.error('Error fetching track:', trackError);
+        throw trackError;
+      }
 
       // Get current user
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -318,19 +323,24 @@ export const workoutService = {
   },
 
   // Complete a workout session
-  async completeWorkout(sessionId) {
+  async completeWorkout(sessionId, workoutData = {}) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) throw new Error('User not authenticated');
 
+    const completionData = {
+      user_id: user.id,
+      session_id: sessionId,
+      completed_at: workoutData.completed_at || new Date().toISOString(),
+      duration_seconds: workoutData.duration_seconds || 0,
+      exercises_completed: workoutData.exercises_completed || 0,
+      sets_completed: workoutData.sets_completed || 0,
+      total_reps: workoutData.total_reps || 0,
+      notes: workoutData.notes || null,
+    };
+
     const { data, error } = await supabase
       .from('user_session_completions')
-      .insert([
-        {
-          user_id: user.id,
-          session_id: sessionId,
-          completed_at: new Date().toISOString(),
-        },
-      ])
+      .insert([completionData])
       .select()
       .single();
 
