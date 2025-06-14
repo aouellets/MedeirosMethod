@@ -23,10 +23,18 @@ const SocialFeedScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [imageDimensions, setImageDimensions] = useState({});
 
   useEffect(() => {
     loadFeedPosts();
-  }, []);
+    
+    // Set up navigation listener to refresh when coming back to this screen
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadFeedPosts();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const loadFeedPosts = async () => {
     try {
@@ -34,6 +42,45 @@ const SocialFeedScreen = ({ navigation }) => {
       const result = await MockSocialService.getFeedPosts(20, 0);
       if (result.success) {
         setPosts(result.posts);
+        // Pre-load image dimensions for better layout
+        result.posts.forEach(post => {
+          if (post.media_urls && post.media_urls.length > 0) {
+            post.media_urls.forEach((imageSource, index) => {
+              const imageKey = `${post.id}-${index}`;
+              if (!imageDimensions[imageKey]) {
+                Image.getSize(
+                  Image.resolveAssetSource(imageSource).uri,
+                  (imageWidth, imageHeight) => {
+                    const maxWidth = width - 30; // Account for padding
+                    const aspectRatio = imageWidth / imageHeight;
+                    const displayHeight = maxWidth / aspectRatio;
+                    
+                    setImageDimensions(prev => ({
+                      ...prev,
+                      [imageKey]: {
+                        width: maxWidth,
+                        height: Math.min(displayHeight, 400), // Max height to prevent extremely tall images
+                        aspectRatio
+                      }
+                    }));
+                  },
+                  (error) => {
+                    console.log('Error getting image size:', error);
+                    // Fallback dimensions
+                    setImageDimensions(prev => ({
+                      ...prev,
+                      [imageKey]: {
+                        width: width - 30,
+                        height: (width - 30) * 0.6,
+                        aspectRatio: 1.67
+                      }
+                    }));
+                  }
+                );
+              }
+            });
+          }
+        });
       } else {
         setError(result.error || 'Failed to load social feed');
       }
@@ -58,8 +105,20 @@ const SocialFeedScreen = ({ navigation }) => {
         : await MockSocialService.likePost(postId);
 
       if (result.success) {
-        // Refresh the feed to update like counts
-        await loadFeedPosts();
+        // Update local state immediately for responsive UI
+        setPosts(currentPosts => 
+          currentPosts.map(post => 
+            post.id === postId 
+              ? { 
+                  ...post, 
+                  is_liked: !isLiked,
+                  likes_count: isLiked 
+                    ? Math.max(0, post.likes_count - 1) 
+                    : post.likes_count + 1
+                }
+              : post
+          )
+        );
       } else {
         Alert.alert('Error', result.error || 'Failed to update like');
       }
@@ -89,6 +148,11 @@ const SocialFeedScreen = ({ navigation }) => {
             {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
+        {item.tags?.includes('youtube') && (
+          <View style={styles.youtubeBadge}>
+            <Text style={styles.youtubeText}>📹 YOUTUBE</Text>
+          </View>
+        )}
       </View>
 
       {/* Post Content */}
@@ -106,25 +170,50 @@ const SocialFeedScreen = ({ navigation }) => {
       {/* Media */}
       {item.media_urls && item.media_urls.length > 0 && (
         <View style={styles.mediaContainer}>
-          {item.media_urls.map((imageSource, index) => (
-            <Image
-              key={`${item.id}-media-${index}`}
-              source={imageSource}
-              style={styles.postImage}
-              resizeMode="cover"
-            />
-          ))}
+          {item.media_urls.map((imageSource, index) => {
+            const imageKey = `${item.id}-${index}`;
+            const dimensions = imageDimensions[imageKey];
+            
+            return (
+              <TouchableOpacity
+                key={imageKey}
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
+              >
+                <Image
+                  source={imageSource}
+                  style={[
+                    styles.postImage,
+                    dimensions ? {
+                      width: dimensions.width,
+                      height: dimensions.height
+                    } : {
+                      width: width - 30,
+                      height: (width - 30) * 0.6 // Fallback while loading
+                    }
+                  ]}
+                  resizeMode="cover"
+                  onError={(error) => console.log('Image load error:', error)}
+                />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
       {/* Tags */}
       {item.tags && item.tags.length > 0 && (
         <View style={styles.tagsContainer}>
-          {item.tags.map((tag, index) => (
+          {item.tags.slice(0, 4).map((tag, index) => (
             <View key={`${item.id}-tag-${index}`} style={styles.tag}>
               <Text style={styles.tagText}>#{tag}</Text>
             </View>
           ))}
+          {item.tags.length > 4 && (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>+{item.tags.length - 4}</Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -305,23 +394,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 15,
     marginBottom: 15,
-    padding: 15,
+    padding: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    overflow: 'hidden',
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    padding: 15,
+    paddingBottom: 10,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginRight: 12,
   },
   userInfo: {
     flex: 1,
@@ -334,19 +425,33 @@ const styles = StyleSheet.create({
   postTime: {
     fontSize: 12,
     color: colors.gray,
+    marginTop: 2,
+  },
+  youtubeBadge: {
+    backgroundColor: '#FF0000',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  youtubeText: {
+    fontSize: 10,
+    color: colors.white,
+    fontWeight: '600',
   },
   postContent: {
     fontSize: 16,
     color: colors.darkGray,
-    marginBottom: 10,
     lineHeight: 22,
+    paddingHorizontal: 15,
+    marginBottom: 10,
   },
   exerciseTag: {
     backgroundColor: colors.lightGray,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 15,
     alignSelf: 'flex-start',
+    marginHorizontal: 15,
     marginBottom: 10,
   },
   exerciseText: {
@@ -356,16 +461,17 @@ const styles = StyleSheet.create({
   },
   mediaContainer: {
     marginBottom: 10,
+    alignItems: 'center', // Center the images
   },
   postImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 10,
+    backgroundColor: colors.lightGray,
+    borderRadius: 8,
     marginBottom: 5,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    paddingHorizontal: 15,
     marginBottom: 10,
   },
   tag: {
@@ -373,8 +479,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
-    marginRight: 5,
-    marginBottom: 5,
+    marginRight: 6,
+    marginBottom: 4,
   },
   tagText: {
     fontSize: 12,
@@ -384,20 +490,22 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 15,
     borderTopWidth: 1,
     borderTopColor: colors.lightGray,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.slateBlue,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   likedText: {
     color: colors.burntOrange,

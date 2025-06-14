@@ -9,9 +9,10 @@ import {
 
 class MockSocialService {
   constructor() {
-    // Keep track of local state changes for likes
+    // Keep track of local state changes for likes and engagement
     this.localPosts = [...getAllMockPosts()];
     this.localLikes = new Set(); // Track which posts the current user has liked
+    this.localComments = { ...mockComments }; // Local copy of comments
   }
 
   /**
@@ -24,12 +25,27 @@ class MockSocialService {
       
       const allPosts = this.localPosts.slice(offset, offset + limit);
       
-      // Apply local like state
-      const postsWithLikes = allPosts.map(post => ({
-        ...post,
-        is_liked: this.localLikes.has(post.id),
-        likes_count: post.likes_count + (this.localLikes.has(post.id) && !post.is_liked ? 1 : 0) - (post.is_liked && !this.localLikes.has(post.id) ? 1 : 0)
-      }));
+      // Apply local like state and calculate accurate counts
+      const postsWithLikes = allPosts.map(post => {
+        const baseCommentsCount = (this.localComments[post.id] || []).length;
+        const baseLikesCount = post.likes_count || 0;
+        const isLikedByUser = this.localLikes.has(post.id);
+        
+        // Calculate adjusted likes count based on user's like state
+        let adjustedLikesCount = baseLikesCount;
+        if (isLikedByUser && !post.is_liked) {
+          adjustedLikesCount += 1; // User liked a post that wasn't originally liked
+        } else if (!isLikedByUser && post.is_liked) {
+          adjustedLikesCount -= 1; // User unliked a post that was originally liked
+        }
+
+        return {
+          ...post,
+          is_liked: isLikedByUser,
+          likes_count: Math.max(0, adjustedLikesCount),
+          comments_count: baseCommentsCount
+        };
+      });
 
       return { success: true, posts: postsWithLikes };
     } catch (error) {
@@ -50,14 +66,25 @@ class MockSocialService {
         return { success: false, error: 'Post not found' };
       }
 
-      const comments = mockComments[postId] || [];
+      const comments = this.localComments[postId] || [];
+      const isLikedByUser = this.localLikes.has(post.id);
+      
+      // Calculate accurate engagement counts
+      const baseLikesCount = post.likes_count || 0;
+      let adjustedLikesCount = baseLikesCount;
+      if (isLikedByUser && !post.is_liked) {
+        adjustedLikesCount += 1;
+      } else if (!isLikedByUser && post.is_liked) {
+        adjustedLikesCount -= 1;
+      }
       
       return { 
         success: true, 
         post: {
           ...post,
-          is_liked: this.localLikes.has(post.id),
-          likes_count: post.likes_count + (this.localLikes.has(post.id) && !post.is_liked ? 1 : 0) - (post.is_liked && !this.localLikes.has(post.id) ? 1 : 0)
+          is_liked: isLikedByUser,
+          likes_count: Math.max(0, adjustedLikesCount),
+          comments_count: comments.length
         }, 
         comments 
       };
@@ -78,9 +105,29 @@ class MockSocialService {
       
       if (isCurrentlyLiked) {
         this.localLikes.delete(postId);
+        
+        // Update the post in local posts
+        const postIndex = this.localPosts.findIndex(p => p.id === postId);
+        if (postIndex !== -1) {
+          this.localPosts[postIndex] = {
+            ...this.localPosts[postIndex],
+            likes_count: Math.max(0, (this.localPosts[postIndex].likes_count || 0) - 1)
+          };
+        }
+        
         return { success: true, action: 'unliked' };
       } else {
         this.localLikes.add(postId);
+        
+        // Update the post in local posts
+        const postIndex = this.localPosts.findIndex(p => p.id === postId);
+        if (postIndex !== -1) {
+          this.localPosts[postIndex] = {
+            ...this.localPosts[postIndex],
+            likes_count: (this.localPosts[postIndex].likes_count || 0) + 1
+          };
+        }
+        
         return { success: true, action: 'liked' };
       }
     } catch (error) {
@@ -97,6 +144,16 @@ class MockSocialService {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       this.localLikes.delete(postId);
+      
+      // Update the post in local posts
+      const postIndex = this.localPosts.findIndex(p => p.id === postId);
+      if (postIndex !== -1) {
+        this.localPosts[postIndex] = {
+          ...this.localPosts[postIndex],
+          likes_count: Math.max(0, (this.localPosts[postIndex].likes_count || 0) - 1)
+        };
+      }
+      
       return { success: true };
     } catch (error) {
       console.error('Mock unlike post error:', error);
@@ -125,16 +182,19 @@ class MockSocialService {
         }
       };
 
-      // Add to mock comments
-      if (!mockComments[postId]) {
-        mockComments[postId] = [];
+      // Add to local comments
+      if (!this.localComments[postId]) {
+        this.localComments[postId] = [];
       }
-      mockComments[postId].unshift(newComment);
+      this.localComments[postId].unshift(newComment);
 
       // Update comment count in local posts
       const postIndex = this.localPosts.findIndex(p => p.id === postId);
       if (postIndex !== -1) {
-        this.localPosts[postIndex].comments_count += 1;
+        this.localPosts[postIndex] = {
+          ...this.localPosts[postIndex],
+          comments_count: this.localComments[postId].length
+        };
       }
 
       return { success: true, comment: newComment };
@@ -151,7 +211,17 @@ class MockSocialService {
     try {
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      const featured = mockFeaturedPosts.slice(0, limit);
+      const featured = mockFeaturedPosts.slice(0, limit).map(post => {
+        const isLikedByUser = this.localLikes.has(post.id);
+        const commentsCount = (this.localComments[post.id] || []).length;
+        
+        return {
+          ...post,
+          is_liked: isLikedByUser,
+          comments_count: commentsCount
+        };
+      });
+      
       return { success: true, posts: featured };
     } catch (error) {
       console.error('Mock get featured posts error:', error);
@@ -208,7 +278,17 @@ class MockSocialService {
       
       const userPosts = this.localPosts
         .filter(post => post.user_id === userId)
-        .slice(offset, offset + limit);
+        .slice(offset, offset + limit)
+        .map(post => {
+          const isLikedByUser = this.localLikes.has(post.id);
+          const commentsCount = (this.localComments[post.id] || []).length;
+          
+          return {
+            ...post,
+            is_liked: isLikedByUser,
+            comments_count: commentsCount
+          };
+        });
 
       return { success: true, posts: userPosts };
     } catch (error) {
@@ -224,7 +304,7 @@ class MockSocialService {
     try {
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      const comments = (mockComments[postId] || []).slice(offset, offset + limit);
+      const comments = (this.localComments[postId] || []).slice(offset, offset + limit);
       return { success: true, comments };
     } catch (error) {
       console.error('Mock get post comments error:', error);

@@ -14,10 +14,18 @@ const CommunityFeedScreen = ({ navigation }) => {
   const [featuredPosts, setFeaturedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [imageDimensions, setImageDimensions] = useState({});
 
   useEffect(() => {
     loadFeedPosts();
-  }, []);
+    
+    // Set up navigation listener to refresh when coming back to this screen
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadFeedPosts();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const loadFeedPosts = async () => {
     try {
@@ -31,6 +39,47 @@ const CommunityFeedScreen = ({ navigation }) => {
 
       setPosts(feedPosts);
       setFeaturedPosts(featured);
+      
+      // Pre-load image dimensions for better layout
+      feedPosts.forEach(post => {
+        if (post.media_urls && post.media_urls.length > 0) {
+          post.media_urls.forEach((imageSource, index) => {
+            const imageKey = `${post.id}-${index}`;
+            if (!imageDimensions[imageKey]) {
+              Image.getSize(
+                Image.resolveAssetSource(imageSource).uri,
+                (imageWidth, imageHeight) => {
+                  const maxWidth = width - 20; // Account for card margins
+                  const aspectRatio = imageWidth / imageHeight;
+                  const displayHeight = maxWidth / aspectRatio;
+                  
+                  setImageDimensions(prev => ({
+                    ...prev,
+                    [imageKey]: {
+                      width: maxWidth,
+                      height: Math.min(displayHeight, 400), // Max height to prevent extremely tall images
+                      aspectRatio
+                    }
+                  }));
+                },
+                (error) => {
+                  console.log('Error getting image size:', error);
+                  // Fallback dimensions
+                  setImageDimensions(prev => ({
+                    ...prev,
+                    [imageKey]: {
+                      width: width - 20,
+                      height: (width - 20) * 0.6,
+                      aspectRatio: 1.67
+                    }
+                  }));
+                }
+              );
+            }
+          });
+        }
+      });
+      
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -44,16 +93,20 @@ const CommunityFeedScreen = ({ navigation }) => {
       const { success, error } = await MockSocialService.toggleLike(postId);
       if (!success) throw new Error(error);
 
-      // Update local state
-      setPosts(posts.map(post => 
-        post.id === postId 
-          ? { 
-              ...post, 
-              is_liked: !isLiked,
-              likes_count: isLiked ? post.likes_count - 1 : post.likes_count + 1
-            }
-          : post
-      ));
+      // Update local state immediately for responsive UI
+      setPosts(currentPosts => 
+        currentPosts.map(post => 
+          post.id === postId 
+            ? { 
+                ...post, 
+                is_liked: !isLiked,
+                likes_count: isLiked 
+                  ? Math.max(0, post.likes_count - 1) 
+                  : post.likes_count + 1
+              }
+            : post
+        )
+      );
     } catch (err) {
       console.error('Like error:', err);
     }
@@ -81,8 +134,8 @@ const CommunityFeedScreen = ({ navigation }) => {
           </View>
         </View>
         {item.tags?.includes('youtube') && (
-          <View style={styles.sponsoredBadge}>
-            <Text style={styles.sponsoredText}>YOUTUBE</Text>
+          <View style={styles.youtubeBadge}>
+            <Text style={styles.youtubeText}>📹 YOUTUBE</Text>
           </View>
         )}
       </View>
@@ -90,21 +143,57 @@ const CommunityFeedScreen = ({ navigation }) => {
       <View style={styles.postContent}>
         <Text style={styles.caption}>{item.content}</Text>
         
+        {item.exercise_name && (
+          <View style={styles.exerciseTag}>
+            <Text style={styles.exerciseText}>💪 {item.exercise_name}</Text>
+          </View>
+        )}
+        
         {item.media_urls && item.media_urls.length > 0 && (
           <View style={styles.mediaContainer}>
-            <Image
-              source={item.media_urls[0]}
-              style={styles.postImage}
-              resizeMode="cover"
-            />
+            {item.media_urls.map((imageSource, index) => {
+              const imageKey = `${item.id}-${index}`;
+              const dimensions = imageDimensions[imageKey];
+              
+              return (
+                <TouchableOpacity
+                  key={imageKey}
+                  activeOpacity={0.9}
+                  onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
+                >
+                  <Image
+                    source={imageSource}
+                    style={[
+                      styles.postImage,
+                      dimensions ? {
+                        width: dimensions.width,
+                        height: dimensions.height
+                      } : {
+                        width: width - 20,
+                        height: (width - 20) * 0.6 // Fallback while loading
+                      }
+                    ]}
+                    resizeMode="cover"
+                    onError={(error) => console.log('Image load error:', error)}
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
         {item.tags && item.tags.length > 0 && (
           <View style={styles.tagsContainer}>
             {item.tags.slice(0, 3).map((tag, index) => (
-              <Text key={index} style={styles.tag}>#{tag}</Text>
+              <View key={index} style={styles.tag}>
+                <Text style={styles.tagText}>#{tag}</Text>
+              </View>
             ))}
+            {item.tags.length > 3 && (
+              <View style={styles.tag}>
+                <Text style={styles.tagText}>+{item.tags.length - 3}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -117,7 +206,10 @@ const CommunityFeedScreen = ({ navigation }) => {
               {item.is_liked ? '❤️' : '🤍'} {item.likes_count || 0}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
+          >
             <Text style={styles.actionText}>💬 {item.comments_count || 0}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton}>
@@ -235,6 +327,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    overflow: 'hidden',
   },
   postHeader: {
     flexDirection: 'row',
@@ -248,9 +341,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     marginRight: 12,
   },
   userName: {
@@ -263,13 +356,13 @@ const styles = StyleSheet.create({
     color: colors.gray,
     marginTop: 2,
   },
-  sponsoredBadge: {
-    backgroundColor: colors.burntOrange,
+  youtubeBadge: {
+    backgroundColor: '#FF0000',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  sponsoredText: {
+  youtubeText: {
     fontSize: 10,
     color: colors.white,
     fontWeight: '600',
@@ -282,43 +375,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.slateBlue,
     lineHeight: 22,
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  exerciseTag: {
+    backgroundColor: colors.lightGray,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  exerciseText: {
+    fontSize: 14,
+    color: colors.slateBlue,
+    fontWeight: '600',
   },
   mediaContainer: {
-    marginBottom: 10,
+    marginBottom: 12,
+    marginHorizontal: -16, // Extend to card edges
+    alignItems: 'center', // Center the images
   },
   postImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
+    backgroundColor: colors.lightGray,
+    borderRadius: 0, // No border radius since it extends to edges
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   tag: {
-    color: colors.burntOrange,
-    fontSize: 14,
+    backgroundColor: colors.burntOrange,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  tagText: {
+    fontSize: 12,
+    color: colors.white,
     fontWeight: '500',
-    marginRight: 10,
-    marginBottom: 5,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingTop: 10,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.lightGray,
   },
   actionButton: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.slateBlue,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   likedText: {
     color: colors.burntOrange,

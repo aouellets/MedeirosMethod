@@ -45,9 +45,7 @@ const SocialStack = () => {
         name="PostDetail" 
         component={PostDetailScreen}
         options={{
-          headerShown: true,
-          title: 'Post Details',
-          headerBackTitle: 'Back'
+          headerShown: false,
         }}
       />
       {/* 
