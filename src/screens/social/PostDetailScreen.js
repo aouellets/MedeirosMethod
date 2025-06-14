@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../theme/colors';
-import SocialService from '../../services/SocialService';
+// Using MockSocialService for MVP demo
+import MockSocialService from '../../services/MockSocialService';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { formatDistanceToNow } from 'date-fns';
@@ -36,7 +37,7 @@ const PostDetailScreen = () => {
   const loadPostDetails = async () => {
     try {
       setLoading(true);
-      const { success, post: postData, comments: commentsData, error } = await SocialService.getPostDetails(postId);
+      const { success, post: postData, comments: commentsData, error } = await MockSocialService.getPostDetails(postId);
       if (success) {
         setPost(postData);
         setComments(commentsData || []);
@@ -52,7 +53,7 @@ const PostDetailScreen = () => {
 
   const handleLike = async () => {
     try {
-      const { success, action, error } = await SocialService.likePost(postId);
+      const { success, action, error } = await MockSocialService.likePost(postId);
       if (success) {
         setPost(prevPost => ({
           ...prevPost,
@@ -74,7 +75,7 @@ const PostDetailScreen = () => {
 
     try {
       setSubmitting(true);
-      const { success, comment, error } = await SocialService.addComment(postId, newComment.trim());
+      const { success, comment, error } = await MockSocialService.addComment(postId, newComment.trim());
       if (success) {
         setComments(prevComments => [...prevComments, comment]);
         setNewComment('');
@@ -97,7 +98,7 @@ const PostDetailScreen = () => {
       <Image
         source={
           item.profiles?.avatar_url
-            ? { uri: item.profiles.avatar_url }
+            ? item.profiles.avatar_url
             : require('../../../assets/logo_transparent.png')
         }
         style={styles.commentAvatar}
@@ -149,6 +150,7 @@ const PostDetailScreen = () => {
           <Ionicons name="arrow-back" size={24} color={colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Post</Text>
+        <Text style={styles.demoLabel}>MVP DEMO</Text>
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -157,7 +159,7 @@ const PostDetailScreen = () => {
             <Image
               source={
                 post?.profiles?.avatar_url
-                  ? { uri: post.profiles.avatar_url }
+                  ? post.profiles.avatar_url
                   : require('../../../assets/logo_transparent.png')
               }
               style={styles.avatar}
@@ -178,10 +180,10 @@ const PostDetailScreen = () => {
 
           {post?.media_urls && post.media_urls.length > 0 && (
             <View style={styles.mediaContainer}>
-              {post.media_urls.map((url, index) => (
+              {post.media_urls.map((imageSource, index) => (
                 <Image
                   key={`${post.id}-media-${index}`}
-                  source={{ uri: url }}
+                  source={imageSource}
                   style={styles.postImage}
                   resizeMode="cover"
                 />
@@ -197,18 +199,19 @@ const PostDetailScreen = () => {
               <Ionicons 
                 name={post?.is_liked ? "heart" : "heart-outline"} 
                 size={24} 
-                color={post?.is_liked ? colors.primary : colors.text}
+                color={post?.is_liked ? colors.burntOrange : colors.slateBlue}
               />
               <Text style={styles.actionText}>{post?.likes_count || 0}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="chatbubble-outline" size={24} color={colors.text} />
-              <Text style={styles.actionText}>💬 {post?.comments_count || 0}</Text>
+              <Ionicons name="chatbubble-outline" size={24} color={colors.slateBlue} />
+              <Text style={styles.actionText}>{post?.comments_count || 0}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="share-outline" size={24} color={colors.text} />
+              <Ionicons name="share-outline" size={24} color={colors.slateBlue} />
+              <Text style={styles.actionText}>{post?.shares_count || 0}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -237,18 +240,17 @@ const PostDetailScreen = () => {
           value={newComment}
           onChangeText={setNewComment}
           multiline
+          maxLength={500}
         />
         <TouchableOpacity
-          style={[styles.commentButton, !newComment.trim() && styles.commentButtonDisabled]}
+          style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
           onPress={handleComment}
-          disabled={!newComment.trim() || submitting}
+          disabled={submitting || !newComment.trim()}
         >
           {submitting ? (
             <ActivityIndicator size="small" color={colors.white} />
           ) : (
-            <Text style={styles.commentButtonText}>
-              {submitting ? 'Posting...' : 'Post'}
-            </Text>
+            <Ionicons name="send" size={20} color={colors.white} />
           )}
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -266,6 +268,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
+    justifyContent: 'space-between',
   },
   backButton: {
     marginRight: 15,
@@ -274,6 +277,20 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.white,
+    flex: 1,
+  },
+  demoLabel: {
+    fontSize: 10,
+    color: colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    fontWeight: 'bold',
+  },
+  scrollView: {
+    flex: 1,
+    paddingHorizontal: 15,
   },
   loadingContainer: {
     flex: 1,
@@ -284,6 +301,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.white,
     marginTop: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 18,
+    color: colors.white,
   },
   postContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -346,9 +372,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.slateBlue,
     fontWeight: '500',
+    marginLeft: 5,
+  },
+  commentsSection: {
+    marginBottom: 10,
+  },
+  commentsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginBottom: 10,
   },
   commentsList: {
-    padding: 15,
+    paddingBottom: 20,
   },
   commentContainer: {
     flexDirection: 'row',
@@ -370,11 +406,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: colors.slateBlue,
+    marginBottom: 2,
   },
   commentText: {
     fontSize: 14,
     color: colors.darkGray,
-    marginVertical: 5,
+    lineHeight: 18,
+    marginBottom: 4,
   },
   commentTime: {
     fontSize: 12,
@@ -382,42 +420,33 @@ const styles = StyleSheet.create({
   },
   commentInputContainer: {
     flexDirection: 'row',
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderTopWidth: 1,
-    borderTopColor: colors.lightGray,
+    alignItems: 'flex-end',
   },
   commentInput: {
     flex: 1,
-    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.lightGray,
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingVertical: 10,
     marginRight: 10,
     maxHeight: 100,
+    fontSize: 14,
     color: colors.darkGray,
   },
-  commentButton: {
+  submitButton: {
     backgroundColor: colors.burntOrange,
     borderRadius: 20,
-    paddingHorizontal: 20,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  commentButtonDisabled: {
-    opacity: 0.5,
-  },
-  commentButtonText: {
-    color: colors.white,
-    fontWeight: 'bold',
-  },
-  commentsSection: {
-    padding: 16,
-  },
-  commentsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 16,
+  submitButtonDisabled: {
+    backgroundColor: colors.gray,
   },
 });
 

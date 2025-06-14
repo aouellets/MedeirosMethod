@@ -6,6 +6,8 @@ import {
   CartScreen,
   SponsorProductsScreen,
 } from '../screens';
+import CheckoutScreen from '../screens/commerce/CheckoutScreen';
+import OrderConfirmationScreen from '../screens/commerce/OrderConfirmationScreen';
 import { colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator();
@@ -38,31 +40,41 @@ const CommerceStack = () => {
         name="ProductDetail" 
         component={ProductDetailScreen}
         options={{
-          title: 'Product Details',
-          headerBackTitle: 'Store',
+          headerShown: false,
         }}
       />
       <Stack.Screen 
         name="Cart" 
         component={CartScreen}
         options={{
-          title: 'Shopping Cart',
-          headerBackTitle: 'Back',
+          headerShown: false,
         }}
       />
       <Stack.Screen 
         name="SponsorProducts" 
         component={SponsorProductsScreen}
-        options={({ route }) => ({
-          title: route.params?.sponsor === 'all' ? 'Partner Products' : 'Sponsor Products',
-          headerBackTitle: 'Store',
-        })}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="Checkout" 
+        component={CheckoutScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen 
+        name="OrderConfirmation" 
+        component={OrderConfirmationScreen}
+        options={{
+          headerShown: false,
+          gestureEnabled: false, // Prevent going back after order completion
+        }}
       />
       {/* 
       Future Commerce Screens:
       - ProductGrid (category view)
-      - Checkout
-      - OrderConfirmed
       - OrderHistory
       - ProductReviews
       */}

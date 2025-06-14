@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d4fe0c67-10de-45f9-8162-c39cf4c342ca"
+      }
+    },
+    "owner": "aouellets"
   }
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions } from 'react-native';
 import { colors } from '../../theme/colors';
-import { SocialService } from '../../services/SocialService';
+// Using MockSocialService for MVP demo
+import MockSocialService from '../../services/MockSocialService';
 import { sponsors } from '../../data/products';
 import { LinearGradient } from 'expo-linear-gradient';
 import FeaturedContent from '../../components/social/FeaturedContent';
@@ -21,11 +22,11 @@ const CommunityFeedScreen = ({ navigation }) => {
   const loadFeedPosts = async () => {
     try {
       setLoading(true);
-      const { success, posts: feedPosts, error: feedError } = await SocialService.getFeedPosts();
+      const { success, posts: feedPosts, error: feedError } = await MockSocialService.getFeedPosts();
       if (!success) throw new Error(feedError);
       
       const { success: featuredSuccess, posts: featured, error: featuredError } = 
-        await SocialService.getFeaturedPosts();
+        await MockSocialService.getFeaturedPosts();
       if (!featuredSuccess) throw new Error(featuredError);
 
       setPosts(feedPosts);
@@ -40,7 +41,7 @@ const CommunityFeedScreen = ({ navigation }) => {
 
   const handleLike = async (postId, isLiked) => {
     try {
-      const { success, error } = await SocialService.toggleLike(postId);
+      const { success, error } = await MockSocialService.toggleLike(postId);
       if (!success) throw new Error(error);
 
       // Update local state
@@ -63,7 +64,11 @@ const CommunityFeedScreen = ({ navigation }) => {
       <View style={styles.postHeader}>
         <View style={styles.userInfo}>
           <Image
-            source={item.profiles?.avatar_url ? { uri: item.profiles.avatar_url } : require('../../../assets/logo_transparent.png')}
+            source={
+              item.profiles?.avatar_url 
+                ? item.profiles.avatar_url
+                : require('../../../assets/logo_transparent.png')
+            }
             style={styles.avatar}
           />
           <View>
@@ -75,9 +80,9 @@ const CommunityFeedScreen = ({ navigation }) => {
             </Text>
           </View>
         </View>
-        {item.is_sponsored && (
+        {item.tags?.includes('youtube') && (
           <View style={styles.sponsoredBadge}>
-            <Text style={styles.sponsoredText}>Sponsored</Text>
+            <Text style={styles.sponsoredText}>YOUTUBE</Text>
           </View>
         )}
       </View>
@@ -87,70 +92,64 @@ const CommunityFeedScreen = ({ navigation }) => {
         
         {item.media_urls && item.media_urls.length > 0 && (
           <View style={styles.mediaContainer}>
-            {item.media_urls.map((url, index) => (
-              <Image
-                key={`${item.id}-media-${index}`}
-                source={{ uri: url }}
-                style={styles.postImage}
-                resizeMode="cover"
-              />
-            ))}
+            <Image
+              source={item.media_urls[0]}
+              style={styles.postImage}
+              resizeMode="cover"
+            />
           </View>
         )}
 
         {item.tags && item.tags.length > 0 && (
-          <View style={styles.tags}>
-            {item.tags.map((tag, index) => (
+          <View style={styles.tagsContainer}>
+            {item.tags.slice(0, 3).map((tag, index) => (
               <Text key={index} style={styles.tag}>#{tag}</Text>
             ))}
           </View>
         )}
-      </View>
 
-      <View style={styles.postActions}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => handleLike(item.id, item.is_liked)}
-        >
-          <Text style={[styles.actionIcon, item.is_liked && styles.likedIcon]}>
-            {item.is_liked ? '❤️' : '🤍'}
-          </Text>
-          <Text style={styles.actionText}>{item.likes_count || 0}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('PostDetail', { postId: item.id })}
-        >
-          <Text style={styles.actionIcon}>💬</Text>
-          <Text style={styles.actionText}>{item.comments_count || 0}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionIcon}>📤</Text>
-          <Text style={styles.actionText}>{item.shares_count || 0}</Text>
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => handleLike(item.id, item.is_liked)}
+          >
+            <Text style={[styles.actionText, item.is_liked && styles.likedText]}>
+              {item.is_liked ? '❤️' : '🤍'} {item.likes_count || 0}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <Text style={styles.actionText}>💬 {item.comments_count || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <Text style={styles.actionText}>📤 {item.shares_count || 0}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 
   const ListHeader = () => (
-    <>
+    <View>
       <View style={styles.header}>
-        <Text style={styles.title}>Community</Text>
-        <TouchableOpacity 
-          style={styles.createButton}
-          onPress={() => navigation.navigate('CreatePost')}
-        >
-          <Text style={styles.createButtonText}>+ Post</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>Community Feed</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.demoLabel}>MVP DEMO</Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate('CreatePost')}
+          >
+            <Text style={styles.createButtonText}>Post</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      <FeaturedContent 
-        posts={featuredPosts}
-        onPostPress={(postId) => navigation.navigate('PostDetail', { postId })}
-      />
-    </>
+      
+      {featuredPosts.length > 0 && (
+        <FeaturedContent 
+          posts={featuredPosts}
+          onPostPress={(post) => navigation.navigate('PostDetail', { postId: post.id })}
+        />
+      )}
+    </View>
   );
 
   return (
@@ -168,9 +167,9 @@ const CommunityFeedScreen = ({ navigation }) => {
 
       <TouchableOpacity 
         style={styles.floatingButton}
-        onPress={() => navigation.navigate('Challenges')}
+        onPress={() => navigation.navigate('CreatePost')}
       >
-        <Text style={styles.floatingButtonText}>🏆</Text>
+        <Text style={styles.floatingButtonText}>+</Text>
       </TouchableOpacity>
     </View>
   );
@@ -198,6 +197,20 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.slateBlue,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  demoLabel: {
+    fontSize: 10,
+    color: colors.slateBlue,
+    backgroundColor: colors.lightGray,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    fontWeight: 'bold',
   },
   createButton: {
     backgroundColor: colors.burntOrange,
@@ -279,47 +292,46 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 8,
   },
-  tags: {
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    marginBottom: 10,
   },
   tag: {
-    fontSize: 12,
     color: colors.burntOrange,
+    fontSize: 14,
     fontWeight: '500',
+    marginRight: 10,
+    marginBottom: 5,
   },
-  postActions: {
+  actions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    paddingTop: 0,
+    justifyContent: 'space-around',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.lightGray,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 20,
-  },
-  actionIcon: {
-    fontSize: 16,
-    marginRight: 4,
-  },
-  likedIcon: {
-    // Already using ❤️ emoji for liked state
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
   actionText: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.slateBlue,
     fontWeight: '500',
+  },
+  likedText: {
+    color: colors.burntOrange,
+    fontWeight: 'bold',
   },
   floatingButton: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 20,
     right: 20,
-    backgroundColor: colors.burntOrange,
     width: 56,
     height: 56,
     borderRadius: 28,
+    backgroundColor: colors.burntOrange,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -330,6 +342,8 @@ const styles = StyleSheet.create({
   },
   floatingButtonText: {
     fontSize: 24,
+    color: colors.white,
+    fontWeight: 'bold',
   },
 });
 

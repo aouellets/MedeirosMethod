@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, Image, ActivityIndicator, Animated, Dimensions } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,6 +8,139 @@ import { colors } from '../../theme/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import TrackSelectorScreen from '../training/TrackSelectorScreen';
 import { workoutService } from '../../services/workoutService';
+
+const { width: screenWidth } = Dimensions.get('window');
+
+// Enhanced Animated Track Card Component
+const AnimatedTrackCard = ({ track, isSelected, onToggle, index }) => {
+  const [scaleAnim] = useState(new Animated.Value(1));
+  const [opacityAnim] = useState(new Animated.Value(0));
+  
+  useEffect(() => {
+    // Stagger animation for cards appearing
+    Animated.timing(opacityAnim, {
+      toValue: 1,
+      duration: 300,
+      delay: index * 100,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const handlePress = () => {
+    // Scale animation on press
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    onToggle(track.id);
+  };
+
+  const renderDifficultyStars = (level) => {
+    return (
+      <View style={styles.difficultyStars}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Text key={star} style={[
+            styles.star,
+            star <= level ? styles.starFilled : styles.starEmpty
+          ]}>
+            ★
+          </Text>
+        ))}
+      </View>
+    );
+  };
+
+  return (
+    <Animated.View style={[
+      { 
+        opacity: opacityAnim,
+        transform: [{ scale: scaleAnim }] 
+      }
+    ]}>
+      <TouchableOpacity
+        style={[
+          styles.modernTrackCard,
+          isSelected && styles.modernSelectedCard,
+        ]}
+        onPress={handlePress}
+        activeOpacity={1}
+      >
+        <LinearGradient
+          colors={isSelected ? [colors.slateBlue + '15', colors.burntOrange + '10'] : ['#ffffff', '#ffffff']}
+          style={styles.cardGradient}
+        >
+          <View style={styles.modernCardContent}>
+            {/* Selection Indicator */}
+            <View style={styles.selectionCorner}>
+              <View style={[
+                styles.modernSelectionIndicator, 
+                isSelected && styles.modernSelectionIndicatorSelected
+              ]}>
+                <Animated.Text style={[
+                  styles.modernCheckmark, 
+                  isSelected && styles.modernCheckmarkSelected
+                ]}>
+                  {isSelected ? '✓' : ''}
+                </Animated.Text>
+              </View>
+            </View>
+
+            {/* Track Header */}
+            <View style={styles.modernTrackHeader}>
+              <View style={styles.emojiContainer}>
+                <Text style={styles.modernTrackEmoji}>{track.emoji}</Text>
+              </View>
+              <View style={styles.modernTrackInfo}>
+                <Text style={[
+                  styles.modernTrackName, 
+                  isSelected && styles.modernTrackNameSelected
+                ]}>
+                  {track.name}
+                </Text>
+                <View style={styles.modernDifficultyRow}>
+                  {renderDifficultyStars(track.difficulty_level)}
+                  <Text style={[
+                    styles.modernDifficultyLabel, 
+                    isSelected && styles.modernDifficultyLabelSelected
+                  ]}>
+                    Level {track.difficulty_level}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Track Description */}
+            <Text style={[
+              styles.modernTrackDescription,
+              isSelected && styles.modernTrackDescriptionSelected
+            ]}>
+              {track.description}
+            </Text>
+
+            {/* Selection Status */}
+            {isSelected && (
+              <View style={styles.modernSelectedBadge}>
+                <View style={styles.selectedBadgeContent}>
+                  <Text style={styles.selectedBadgeIcon}>✓</Text>
+                  <Text style={styles.modernSelectedBadgeText}>Selected</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
 const SignUpScreen = ({ navigation }) => {
   const { signUp, isLoading } = useAuth();
@@ -47,6 +180,7 @@ const SignUpScreen = ({ navigation }) => {
   const [trackOptions, setTrackOptions] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState(null);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
   const handleImagePicker = async () => {
     try {
@@ -114,6 +248,12 @@ const SignUpScreen = ({ navigation }) => {
   };
 
   const validateStep3 = () => {
+    // Step 3 is Training Preferences - no required fields, all are optional
+    // User can proceed to step 4 without making selections
+    return true;
+  };
+
+  const validateStep4 = () => {
     const newErrors = {};
     if (!formData.selectedTrackIds || formData.selectedTrackIds.length === 0) {
       newErrors.selectedTrackIds = 'Please select at least one track';
@@ -228,6 +368,18 @@ const SignUpScreen = ({ navigation }) => {
   useEffect(() => {
     if (currentStep === 4 && trackOptions.length === 0) {
       loadTracksForSignUp();
+    }
+  }, [currentStep]);
+
+  // Animation effect for step 4
+  useEffect(() => {
+    if (currentStep === 4) {
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
     }
   }, [currentStep]);
 
@@ -579,40 +731,91 @@ const SignUpScreen = ({ navigation }) => {
   );
 
   const renderStep4 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Choose Your Training Tracks</Text>
-      <Text style={styles.stepSubtitle}>Select one or more tracks to get started. You can change these later in your profile.</Text>
+    <Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
+      <View style={styles.modernTrackSelectionHeader}>
+        <Text style={styles.modernStepTitle}>Choose Your Training Path</Text>
+        <Text style={styles.modernStepSubtitle}>
+          Select training tracks that match your fitness goals. Each track is carefully designed to help you progress systematically.
+        </Text>
+        
+        {/* Modern Selection Counter */}
+        <View style={styles.modernSelectionCounter}>
+          <View style={styles.counterContent}>
+            <View style={styles.counterIcon}>
+              <Text style={styles.counterIconText}>🎯</Text>
+            </View>
+            <Text style={styles.modernCounterText}>
+              {formData.selectedTrackIds.length} of {trackOptions.length} tracks selected
+            </Text>
+          </View>
+          {formData.selectedTrackIds.length > 0 && (
+            <View style={styles.progressDots}>
+              {Array(Math.min(formData.selectedTrackIds.length, 5)).fill().map((_, i) => (
+                <View key={i} style={styles.progressDot} />
+              ))}
+            </View>
+          )}
+        </View>
+      </View>
+      
       {trackLoading ? (
-        <ActivityIndicator size="large" color={colors.burntOrange} />
+        <View style={styles.modernLoadingContainer}>
+          <ActivityIndicator size="large" color={colors.burntOrange} />
+          <Text style={styles.modernLoadingText}>Discovering perfect tracks for you...</Text>
+          <View style={styles.loadingSubtext}>
+            <Text style={styles.loadingSubtextText}>This won't take long</Text>
+          </View>
+        </View>
       ) : trackError ? (
-        <Text style={styles.errorText}>{trackError}</Text>
+        <View style={styles.modernErrorContainer}>
+          <View style={styles.errorIconContainer}>
+            <Text style={styles.modernErrorIcon}>⚠️</Text>
+          </View>
+          <Text style={styles.modernErrorTitle}>Oops! Something went wrong</Text>
+          <Text style={styles.modernErrorText}>{trackError}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => {
+              setTrackError(null);
+              loadTracksForSignUp();
+            }}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
-        <ScrollView style={{ maxHeight: 350 }}>
-          {trackOptions.map(track => {
+        <ScrollView 
+          style={styles.modernTracksScrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.modernTracksContainer}
+        >
+          {trackOptions.map((track, index) => {
             const isSelected = formData.selectedTrackIds.includes(track.id);
             return (
-              <TouchableOpacity
+              <AnimatedTrackCard
                 key={track.id}
-                style={[styles.trackCard, isSelected && styles.selectedCard]}
-                onPress={() => handleTrackToggle(track.id)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.trackHeader}>
-                  <Text style={styles.trackEmoji}>{track.emoji}</Text>
-                  <Text style={styles.trackName}>{track.name}</Text>
-                  <Text style={styles.difficultyText}>Difficulty: {track.difficulty_level}/5</Text>
-                </View>
-                <Text style={styles.trackDescription}>{track.description}</Text>
-                <View style={[styles.selectButton, isSelected && styles.selectedButton]}>
-                  <Text style={styles.selectButtonText}>{isSelected ? 'Selected' : 'Tap to Select'}</Text>
-                </View>
-              </TouchableOpacity>
+                track={track}
+                isSelected={isSelected}
+                onToggle={handleTrackToggle}
+                index={index}
+              />
             );
           })}
+          
+          {/* Bottom Spacing */}
+          <View style={styles.bottomSpacing} />
         </ScrollView>
       )}
-      {errors.selectedTrackIds && <Text style={styles.errorText}>{errors.selectedTrackIds}</Text>}
-    </View>
+      
+      {errors.selectedTrackIds && (
+        <Animated.View style={styles.modernErrorMessageContainer}>
+          <View style={styles.errorMessageContent}>
+            <Text style={styles.errorMessageIcon}>⚠️</Text>
+            <Text style={styles.modernErrorMessageText}>{errors.selectedTrackIds}</Text>
+          </View>
+        </Animated.View>
+      )}
+    </Animated.View>
   );
 
   return (
@@ -1096,6 +1299,478 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.boneWhite,
     marginBottom: 10,
+  },
+  // Enhanced Track Selection Styles
+  trackSelectionHeader: {
+    marginBottom: 20,
+  },
+  selectionCounter: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  counterText: {
+    fontSize: 12,
+    color: colors.boneWhite,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.gray,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+  },
+  errorIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  tracksScrollView: {
+    maxHeight: 400,
+  },
+  tracksContainer: {
+    paddingBottom: 10,
+  },
+  enhancedTrackCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.lightGray,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  enhancedSelectedCard: {
+    borderColor: colors.slateBlue,
+    shadowColor: colors.slateBlue,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+    backgroundColor: '#f8f9ff',
+  },
+  trackCardContent: {
+    padding: 16,
+  },
+  trackCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  trackTitleSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  enhancedTrackEmoji: {
+    fontSize: 28,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  trackTitleWrapper: {
+    flex: 1,
+  },
+  enhancedTrackName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.slateBlue,
+    marginBottom: 4,
+  },
+  enhancedTrackNameSelected: {
+    color: colors.slateBlue,
+  },
+  difficultyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  difficultyStars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  star: {
+    fontSize: 14,
+    marginRight: 1,
+  },
+  starFilled: {
+    color: '#FFD700',
+  },
+  starEmpty: {
+    color: colors.lightGray,
+  },
+  difficultyLabel: {
+    fontSize: 12,
+    color: colors.gray,
+    fontWeight: '600',
+  },
+  difficultyLabelSelected: {
+    color: colors.slateBlue,
+  },
+  selectionIndicator: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.lightGray,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionIndicatorSelected: {
+    backgroundColor: colors.slateBlue,
+    borderColor: colors.slateBlue,
+  },
+  checkmark: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.gray,
+  },
+  checkmarkSelected: {
+    color: colors.white,
+  },
+  enhancedTrackDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.gray,
+    marginBottom: 8,
+  },
+  enhancedTrackDescriptionSelected: {
+    color: '#666',
+  },
+  selectedBadge: {
+    backgroundColor: colors.slateBlue,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  selectedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 0.5,
+  },
+  errorMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  
+  // Modern Enhanced Styles
+  modernTrackSelectionHeader: {
+    marginBottom: 24,
+    paddingBottom: 16,
+  },
+  modernStepTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.slateBlue,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modernStepSubtitle: {
+    fontSize: 15,
+    color: colors.boneWhite,
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+    opacity: 0.95,
+  },
+  modernSelectionCounter: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  counterContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterIcon: {
+    marginRight: 8,
+  },
+  counterIconText: {
+    fontSize: 16,
+  },
+  modernCounterText: {
+    fontSize: 14,
+    color: colors.boneWhite,
+    fontWeight: '600',
+  },
+  progressDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 4,
+  },
+  progressDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.burntOrange,
+  },
+  
+  // Modern Loading Styles
+  modernLoadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+    paddingHorizontal: 20,
+  },
+  modernLoadingText: {
+    marginTop: 16,
+    fontSize: 18,
+    color: colors.slateBlue,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+  },
+  loadingSubtextText: {
+    fontSize: 14,
+    color: colors.gray,
+    fontStyle: 'italic',
+  },
+  
+  // Modern Error Styles
+  modernErrorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  errorIconContainer: {
+    marginBottom: 16,
+  },
+  modernErrorIcon: {
+    fontSize: 32,
+  },
+  modernErrorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.slateBlue,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modernErrorText: {
+    fontSize: 14,
+    color: colors.gray,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: colors.burntOrange,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // Modern Track Card Styles
+  modernTracksScrollView: {
+    flex: 1,
+  },
+  modernTracksContainer: {
+    paddingHorizontal: 4,
+    paddingBottom: 20,
+  },
+  modernTrackCard: {
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modernSelectedCard: {
+    shadowColor: colors.slateBlue,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  cardGradient: {
+    flex: 1,
+  },
+  modernCardContent: {
+    padding: 20,
+    position: 'relative',
+  },
+  selectionCorner: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 1,
+  },
+  modernSelectionIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderWidth: 2,
+    borderColor: colors.lightGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernSelectionIndicatorSelected: {
+    backgroundColor: colors.slateBlue,
+    borderColor: colors.slateBlue,
+  },
+  modernCheckmark: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: 'transparent',
+  },
+  modernCheckmarkSelected: {
+    color: colors.white,
+  },
+  modernTrackHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    paddingRight: 40,
+  },
+  emojiContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  modernTrackEmoji: {
+    fontSize: 24,
+  },
+  modernTrackInfo: {
+    flex: 1,
+  },
+  modernTrackName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.slateBlue,
+    marginBottom: 6,
+    lineHeight: 24,
+  },
+  modernTrackNameSelected: {
+    color: colors.slateBlue,
+  },
+  modernDifficultyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modernDifficultyLabel: {
+    fontSize: 13,
+    color: colors.gray,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  modernDifficultyLabelSelected: {
+    color: colors.slateBlue,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+  },
+  modernTrackDescription: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.gray,
+    marginBottom: 16,
+  },
+  modernTrackDescriptionSelected: {
+    color: '#555',
+  },
+  modernSelectedBadge: {
+    alignSelf: 'flex-start',
+  },
+  selectedBadgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.slateBlue,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  selectedBadgeIcon: {
+    fontSize: 12,
+    color: colors.white,
+    marginRight: 6,
+  },
+  modernSelectedBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 0.5,
+  },
+  bottomSpacing: {
+    height: 20,
+  },
+  
+  // Modern Error Message
+  modernErrorMessageContainer: {
+    marginTop: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.15)',
+    overflow: 'hidden',
+  },
+  errorMessageContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  errorMessageIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  modernErrorMessageText: {
+    fontSize: 14,
+    color: '#d73a49',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });
 

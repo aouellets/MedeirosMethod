@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../theme/colors';
-import SocialService from '../../services/SocialService';
+// Using MockSocialService for MVP demo
+import MockSocialService from '../../services/MockSocialService';
 
 const { width } = Dimensions.get('window');
 
@@ -30,7 +31,7 @@ const SocialFeedScreen = ({ navigation }) => {
   const loadFeedPosts = async () => {
     try {
       setError(null);
-      const result = await SocialService.getFeedPosts(20, 0);
+      const result = await MockSocialService.getFeedPosts(20, 0);
       if (result.success) {
         setPosts(result.posts);
       } else {
@@ -53,8 +54,8 @@ const SocialFeedScreen = ({ navigation }) => {
   const handleLikePost = async (postId, isLiked) => {
     try {
       const result = isLiked 
-        ? await SocialService.unlikePost(postId)
-        : await SocialService.likePost(postId);
+        ? await MockSocialService.unlikePost(postId)
+        : await MockSocialService.likePost(postId);
 
       if (result.success) {
         // Refresh the feed to update like counts
@@ -75,7 +76,7 @@ const SocialFeedScreen = ({ navigation }) => {
         <Image
           source={
             item.profiles?.avatar_url
-              ? { uri: item.profiles.avatar_url }
+              ? item.profiles.avatar_url
               : require('../../../assets/logo_transparent.png')
           }
           style={styles.avatar}
@@ -105,10 +106,10 @@ const SocialFeedScreen = ({ navigation }) => {
       {/* Media */}
       {item.media_urls && item.media_urls.length > 0 && (
         <View style={styles.mediaContainer}>
-          {item.media_urls.map((url, index) => (
+          {item.media_urls.map((imageSource, index) => (
             <Image
               key={`${item.id}-media-${index}`}
-              source={{ uri: url }}
+              source={imageSource}
               style={styles.postImage}
               resizeMode="cover"
             />
@@ -133,7 +134,12 @@ const SocialFeedScreen = ({ navigation }) => {
           style={styles.actionButton}
           onPress={() => handleLikePost(item.id, item.is_liked)}
         >
-          <Text style={styles.actionText}>❤️ {item.likes_count || 0}</Text>
+          <Text style={[
+            styles.actionText, 
+            item.is_liked && styles.likedText
+          ]}>
+            {item.is_liked ? '❤️' : '🤍'} {item.likes_count || 0}
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -154,13 +160,13 @@ const SocialFeedScreen = ({ navigation }) => {
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyTitle}>Welcome to the Community!</Text>
       <Text style={styles.emptyText}>
-        Start following other athletes to see their workout posts and progress photos here.
+        This is a preview of the social feed featuring Justin Medeiros' training content and YouTube videos.
       </Text>
       <TouchableOpacity
         style={styles.createPostButton}
         onPress={() => navigation.navigate('CreatePost')}
       >
-        <Text style={styles.createPostText}>Share Your First Post</Text>
+        <Text style={styles.createPostText}>Create Demo Post</Text>
       </TouchableOpacity>
     </View>
   );
@@ -199,12 +205,15 @@ const SocialFeedScreen = ({ navigation }) => {
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Social Feed</Text>
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={() => navigation.navigate('CreatePost')}
-        >
-          <Text style={styles.createButtonText}>+</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <Text style={styles.demoLabel}>MVP DEMO</Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => navigation.navigate('CreatePost')}
+          >
+            <Text style={styles.createButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {error ? (
@@ -247,6 +256,20 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: colors.white,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  demoLabel: {
+    fontSize: 10,
+    color: colors.white,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    fontWeight: 'bold',
   },
   createButton: {
     width: 40,
@@ -375,6 +398,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.slateBlue,
     fontWeight: '500',
+  },
+  likedText: {
+    color: colors.burntOrange,
+    fontWeight: 'bold',
   },
   emptyContainer: {
     alignItems: 'center',
